@@ -8,7 +8,7 @@
 import SpriteKit
 import GameplayKit
 
-class GameScene: SKScene {
+class GameScene: SKScene, SKPhysicsContactDelegate {
     
     //var bird2 = SKSpriteNode ()
     var bird = SKSpriteNode()
@@ -19,6 +19,14 @@ class GameScene: SKScene {
     var box5 = SKSpriteNode()
     
     var gameStarted = false
+    var originalPosition : CGPoint?
+    var score = 0
+    var scoreLabel = SKLabelNode()
+    
+    enum ColliderType: UInt32{
+        case Bird = 1
+        case Box = 2
+    }
     
     override func didMove(to view: SKView) {
     /* Kodla görünüm oluşturma;
@@ -32,6 +40,7 @@ class GameScene: SKScene {
         
         self.physicsBody = SKPhysicsBody(edgeLoopFrom: frame)//çerçeveledik ekranı kuş düşünce yerde kalır kaybolmaz. ama sadece kafası göründü :)
         self.scene?.scaleMode = .aspectFit // aşağı düşen kuş ve boxların zeminin altına kaymaması için.
+        self.physicsWorld.contactDelegate = self // artık bizim contactları algılama opsiyonumuz olacak.
         
         //BIRD
         
@@ -44,6 +53,12 @@ class GameScene: SKScene {
         bird.physicsBody?.affectedByGravity = false
         bird.physicsBody?.isDynamic = true
         bird.physicsBody?.mass = 0.15
+        originalPosition = bird.position
+        
+        bird.physicsBody?.contactTestBitMask = ColliderType.Bird.rawValue
+        bird.physicsBody?.categoryBitMask = ColliderType.Bird.rawValue
+        bird.physicsBody?.collisionBitMask = ColliderType.Box.rawValue
+        
         
         // BRICKS
         
@@ -57,12 +72,16 @@ class GameScene: SKScene {
         box1.physicsBody?.allowsRotation = true // çarptığımda sağa sola dönsün.
         box1.physicsBody?.mass = 0.4
         
+        box1.physicsBody?.collisionBitMask = ColliderType.Bird.rawValue
+        
         box2 = childNode(withName: "box2") as! SKSpriteNode
         box2.physicsBody = SKPhysicsBody(rectangleOf: size)
         box2.physicsBody?.isDynamic = true
         box2.physicsBody?.affectedByGravity = true
         box2.physicsBody?.allowsRotation = true // çarptığımda sağa sola dönsün.
         box2.physicsBody?.mass = 0.4
+        
+        box2.physicsBody?.collisionBitMask = ColliderType.Bird.rawValue
         
         box3 = childNode(withName: "box3") as! SKSpriteNode
         box3.physicsBody = SKPhysicsBody(rectangleOf: size)
@@ -71,6 +90,8 @@ class GameScene: SKScene {
         box3.physicsBody?.allowsRotation = true // çarptığımda sağa sola dönsün.
         box3.physicsBody?.mass = 0.4
         
+        box3.physicsBody?.collisionBitMask = ColliderType.Bird.rawValue
+        
         box4 = childNode(withName: "box4") as! SKSpriteNode
         box4.physicsBody = SKPhysicsBody(rectangleOf: size)
         box4.physicsBody?.isDynamic = true
@@ -78,16 +99,36 @@ class GameScene: SKScene {
         box4.physicsBody?.allowsRotation = true // çarptığımda sağa sola dönsün.
         box4.physicsBody?.mass = 0.4
         
+        box4.physicsBody?.collisionBitMask = ColliderType.Bird.rawValue
+        
         box5 = childNode(withName: "box5") as! SKSpriteNode
         box5.physicsBody = SKPhysicsBody(rectangleOf: size)
         box5.physicsBody?.isDynamic = true
         box5.physicsBody?.affectedByGravity = true
         box5.physicsBody?.allowsRotation = true // çarptığımda sağa sola dönsün.
-        box1.physicsBody?.mass = 0.4
+        box5.physicsBody?.mass = 0.4
+        
+        box5.physicsBody?.collisionBitMask = ColliderType.Bird.rawValue
+        
+        //LABEL
+        
+        scoreLabel.fontName = "Helvetica"
+        scoreLabel.fontSize = 60
+        scoreLabel.text = "0"
+        scoreLabel.position = CGPoint(x: 0, y: frame.height / 4)
+        scoreLabel.zPosition = 2
+        self.addChild(scoreLabel)
         
         
         
-        
+    }
+    
+    func didBegin(_ contact: SKPhysicsContact) {
+        if contact.bodyA.collisionBitMask == ColliderType.Bird.rawValue || contact.bodyB.collisionBitMask == ColliderType.Bird.rawValue {
+            
+            score += 1
+            scoreLabel.text = String(score)
+        }
     }
     
     
@@ -137,6 +178,7 @@ class GameScene: SKScene {
                     for node in touchNodes {
                         if let sprite = node as? SKSpriteNode{ //skspritenode a cast etmeye çalışıyorum, sonra kuşla aynı mı ona bakıcam, başka yere de dokunuyor olabilir kullanıcı.
                             if sprite == bird {
+                            
                                 bird.position = touchLocation
                             }
                         }
@@ -147,6 +189,33 @@ class GameScene: SKScene {
     }
     
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+        if gameStarted == false {
+            
+            if let touch = touches.first {
+                let touchLocation = touch.location(in: self)
+                let touchNodes = nodes (at: touchLocation)
+                
+                if touchNodes .isEmpty == false {
+                    for node in touchNodes {
+                        if let sprite = node as? SKSpriteNode{ //skspritenode a cast etmeye çalışıyorum, sonra kuşla aynı mı ona bakıcam, başka yere de dokunuyor olabilir kullanıcı.
+                            if sprite == bird {
+                            
+                            // + dersek aynı yöne gider, - demeliyiz.
+                              let dx = -(touchLocation.x - originalPosition!.x)
+                              let dy = -(touchLocation.y - originalPosition!.y)
+                              let impulse = CGVector(dx: dx, dy: dy)
+                                
+                                bird.physicsBody?.applyImpulse(impulse)
+                                bird.physicsBody?.affectedByGravity = true
+                                
+                                gameStarted = true // tekrar kuşu havada tutamayalım.
+                                
+                            }
+                        }
+                    }
+                }
+            }
+        }
         
     }
     
@@ -157,5 +226,25 @@ class GameScene: SKScene {
     
     override func update(_ currentTime: TimeInterval) {
         // Called before each frame is rendered
+        
+        //if let kontrolü yaparak optional olmaktan cıkaralım.
+        if let birdPhysicsBody = bird.physicsBody {
+            
+            if birdPhysicsBody.velocity.dx <= 0.1 && birdPhysicsBody.velocity.dy <= 0.1 && birdPhysicsBody.angularVelocity <= 0.1 && gameStarted == true {
+                
+                bird.physicsBody?.affectedByGravity = false
+                bird.physicsBody?.velocity = CGVector(dx: 0, dy: 0)
+                bird.physicsBody?.angularVelocity = 0
+                bird.zPosition = 1
+                bird.position = originalPosition!
+                gameStarted = false
+                
+                
+                score = 0
+                scoreLabel.text = String(score)
+                
+                gameStarted = false
+            }
+        }
     }
 }
